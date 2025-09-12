@@ -84,7 +84,7 @@ class WebsiteUser(HttpUser):
         try:
             self.discovered_urls, self.static_assets = self._crawl_website(self.host)
             self.search_info = self._detect_search_patterns()
-            
+
             if not self.discovered_urls:
                 print("Warning: No URLs discovered. Adding root path.")
                 self.discovered_urls = ["/"]
@@ -97,7 +97,7 @@ class WebsiteUser(HttpUser):
             self.static_assets = []
             self.search_info = {'has_search': False}
 
-    def _crawl_website(self, base_url: str, max_pages: int = 1000) -> tuple[list[str], list[str]]:
+    def _crawl_website(self, base_url: str, max_pages: int = 100) -> tuple[list[str], list[str]]:
         """
         Crawls a website to find all unique, internal URLs and static assets.
         Uses a breadth-first approach to discover as many URLs as possible.
@@ -127,14 +127,14 @@ class WebsiteUser(HttpUser):
         session.verify = True  # Set to False if you have SSL issues
 
         crawled_count = 0
-        
+
         while to_crawl and crawled_count < max_pages:
             path = to_crawl.pop(0)
-            
+
             # Skip if we've already crawled this URL
             if path in crawled_urls:
                 continue
-                
+
             crawled_urls.add(path)
             crawled_count += 1
 
@@ -173,18 +173,18 @@ class WebsiteUser(HttpUser):
                     parsed_url = urlparse(absolute_url)
 
                     # Check if it's an internal link and we haven't seen it before
-                    if (parsed_url.netloc == base_netloc and 
+                    if (parsed_url.netloc == base_netloc and
                         parsed_url.path and
                         parsed_url.path not in discovered_paths and
                         parsed_url.path not in static_assets and
                         parsed_url.path not in crawled_urls):
-                        
+
                         if self._is_static_asset(parsed_url.path):
                             static_assets.add(parsed_url.path)
                         else:
                             discovered_paths.add(parsed_url.path)
                             # Add to crawling queue - increased limit for better discovery
-                            if len(to_crawl) < 2000:
+                            if len(to_crawl) < 200:
                                 to_crawl.append(parsed_url.path)
                                 new_urls_found += 1
 
@@ -270,6 +270,20 @@ class WebsiteUser(HttpUser):
         else:
             # Fallback if no URLs discovered
             self.client.get("/")
+
+    @task(2)
+    def visit_static_asset(self):
+        """
+        A task that simulates loading static assets (CSS, JS, images, etc.).
+        """
+        if self.static_assets:
+            asset_to_visit = random.choice(self.static_assets)
+            try:
+                with self.client.get(asset_to_visit, catch_response=True, name="static_asset") as response:
+                    if response.status_code not in [200, 304]:  # 304 is Not Modified (cached)
+                        response.failure(f"Static asset failed with status {response.status_code}")
+            except Exception as e:
+                print(f"Static asset request failed for {asset_to_visit}: {e}")
 
     @task(2)
     def visit_static_asset(self):
