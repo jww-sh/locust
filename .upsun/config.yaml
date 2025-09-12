@@ -42,7 +42,7 @@ routes:
 # This file defines how incoming HTTP requests are routed to your application.
 # For this project, it makes the Locust web UI publicly accessible.
 
-"https://{default}/":
-  type: upstream
-  # This must match the 'name' in .upsun/config.yaml
-  upstream: "locust-tester:http"
+  "https://{default}/":
+    type: upstream
+    # This must match the 'name' in .upsun/config.yaml
+    upstream: "locust-tester:http"
