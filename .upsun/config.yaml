@@ -5,7 +5,6 @@ applications:
     # The location of the application's code.
     source:
       root: "locust"
-    disk: 256
     hooks:
       build: |
         # Install Python dependencies from requirements.txt
