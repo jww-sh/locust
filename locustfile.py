@@ -128,7 +128,7 @@ class WebsiteUser(HttpUser):
         static_extensions = r"\.(css|js|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|pdf|zip|gz|mp4|webm|xml|json)$"
         return bool(re.search(static_extensions, path, re.IGNORECASE))
 
-    @task
+    @task(3)
     def visit_random_page(self):
         """
         A task that simulates a user visiting a random discovered page.
@@ -145,6 +145,116 @@ class WebsiteUser(HttpUser):
         else:
             # Fallback if no URLs discovered
             self.client.get("/")
+
+    @task(2)
+    def search_basic(self):
+        """
+        Simulates a user performing a basic search.
+        Adapts to different search patterns found during crawling.
+        """
+        if hasattr(self, 'search_info') and self.search_info.get('has_search'):
+            self._perform_detected_search()
+        else:
+            self._perform_common_search_patterns()
+
+    @task(1)
+    def search_with_filters(self):
+        """
+        Simulates a user searching with additional filters/parameters.
+        """
+        if hasattr(self, 'search_info') and self.search_info.get('has_search'):
+            self._perform_filtered_search()
+        else:
+            self._perform_ecommerce_search()
+
+    def _perform_detected_search(self):
+        """
+        Perform search using patterns detected during crawling.
+        Returns the response for URL discovery.
+        """
+        search_path = random.choice(self.search_info['search_paths'])
+        param_name = self.search_info['search_params'][0] if self.search_info['search_params'] else 'q'
+        
+        # Choose appropriate search terms based on detected patterns
+        if 'catalogsearch' in search_path.lower() or any('catalog' in path for path in self.search_info['search_paths']):
+            query = random.choice(SEARCH_QUERIES)
+        else:
+            query = random.choice(GENERIC_SEARCH_TERMS)
+        
+        url = f"{search_path}?{param_name}={query}"
+        response = self.client.get(url, name="detected_search")
+        return response
+
+    def _perform_filtered_search(self):
+        """
+        Perform search with filters using detected patterns.
+        Returns the response for URL discovery.
+        """
+        search_path = random.choice(self.search_info['search_paths'])
+        param_name = self.search_info['search_params'][0] if self.search_info['search_params'] else 'q'
+        
+        query = random.choice(SEARCH_QUERIES)
+        color = random.choice(COLORS)
+        size = random.choice(SIZES)
+        
+        url = f"{search_path}?{param_name}={query}&color={color}&size={size}"
+        response = self.client.get(url, name="filtered_search")
+        return response
+
+    def _perform_common_search_patterns(self):
+        """
+        Try common search URL patterns when no specific pattern is detected.
+        Returns the response for URL discovery.
+        """
+        query = random.choice(GENERIC_SEARCH_TERMS)
+        
+        # Try common search URL patterns
+        search_patterns = [
+            f"/search?q={query}",
+            f"/search/?query={query}",
+            f"/?s={query}",
+            f"/s/{query}",
+            f"/find?q={query}"
+        ]
+        
+        search_url = random.choice(search_patterns)
+        try:
+            with self.client.get(search_url, catch_response=True, name="generic_search") as response:
+                if response.status_code == 404:
+                    response.failure("Search endpoint not found")
+                    return None
+                return response
+        except Exception as e:
+            print(f"Generic search failed: {e}")
+            return None
+
+    def _perform_ecommerce_search(self):
+        """
+        Perform ecommerce-style search with filters.
+        Returns the response for URL discovery.
+        """
+        query = random.choice(SEARCH_QUERIES)
+        color = random.choice(COLORS)
+        size = random.choice(SIZES)
+        
+        # Try common ecommerce search patterns
+        ecommerce_patterns = [
+            f"/catalogsearch/result/?q={query}",
+            f"/search?q={query}&color={color}&size={size}",
+            f"/products/search?query={query}&filters[color]={color}",
+            f"/shop?search={query}&color={color}&size={size}"
+        ]
+        
+        search_url = random.choice(ecommerce_patterns)
+        try:
+            with self.client.get(search_url, catch_response=True, name="ecommerce_search") as response:
+                if response.status_code == 404:
+                    response.failure("Ecommerce search endpoint not found")
+                    return None
+                return response
+        except Exception as e:
+            print(f"Ecommerce search failed: {e}")
+            return None
 
     @task(1)  # Lower weight task
     def visit_homepage(self):
