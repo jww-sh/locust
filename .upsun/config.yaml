@@ -4,7 +4,7 @@ applications:
     type: "python:3.11"
     # The location of the application's code.
     source:
-      root: "locust"
+      root: "/"
     hooks:
       build: |
         # Install Python dependencies from requirements.txt
