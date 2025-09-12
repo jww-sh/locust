@@ -1,7 +1,7 @@
 applications:
   locust-tester:
     # The type of the application to build for the load tester.
-    type: "python:3.11"
+    type: "python:3.12"
     # The location of the application's code.
     source:
       root: "/"
