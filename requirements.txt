@@ -1,0 +1,3 @@
+locust
+beautifulsoup4
+requests
