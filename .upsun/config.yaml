@@ -1,47 +1,27 @@
-# .upsun/config.yaml
-
-# This file defines the main application for your Upsun project.
-# It specifies how to build and deploy the Locust load tester.
 applications:
-
-  # A unique name for your application.
   locust-tester:
-
-  # Specifies the runtime environment. We're using Python 3.11.
-    type: python:3.11
-
-  # Defines the persistent disk size available to the application.
-    disk: 1024 # MB
-
-  # Build and deploy hooks.
+    # The type of the application to build for the load tester.
+    type: "python:3.11"
+    # The location of the application's code.
+    source:
+      root: "locust"
+    disk: 256
     hooks:
-    # The 'build' hook runs once when the environment is being built.
       build: |
-      # Install Python dependencies from requirements.txt
+        # Install Python dependencies from requirements.txt
         pip install -r requirements.txt
-
-  # Web server configuration.
     web:
-    # The command to start the Locust web UI.
-    # It binds to all network interfaces (0.0.0.0) on the port provided by Upsun ($PORT).
-      command: locust -f locustfile.py --web --web-host 0.0.0.0 --web-port $PORT
-
-  # Environment variables available to the application.
+      commands:
+        start: locust -f locustfile.py --web --web-host 0.0.0.0 --web-port $PORT
     variables:
-    # This is a critical variable.
-    # Set this to the full base URL of the website you want to test.
-    # The locustfile.py will use this as the starting point for its crawler.
       env:
+        # IMPORTANT: Set this to the public URL of the application you want to test.
+        # For example, your main production URL.
         TARGET_HOST: 'https://main-bvxea6i-r7lsq3g4osqao.eu-3.platformsh.site'
 
 
 
 routes:
-# .upsun/routes.yaml
-
-# This file defines how incoming HTTP requests are routed to your application.
-# For this project, it makes the Locust web UI publicly accessible.
-
   "https://{default}/":
     type: upstream
     # This must match the 'name' in .upsun/config.yaml
