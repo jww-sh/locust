@@ -1,34 +1,28 @@
-import locust
-
-import gevent.monkey
-gevent.monkey.patch_all()
-
-
-from locust import HttpUser, task, between
-
-
 import os
 import re
 from urllib.parse import urljoin, urlparse
+import random
 
+# Import gevent and patch BEFORE importing other libraries
+import gevent.monkey
+gevent.monkey.patch_all()
+
+from locust import HttpUser, task, between
 import requests
 from bs4 import BeautifulSoup
 
 
-
 # --- Configuration ---
-# The host to be tested should be set via the TARGET_HOST environment variable.
-# It defaults to a safe example if the variable is not set.
 TARGET_HOST = os.getenv("TARGET_HOST", "https://docs.locust.io")
 
 class WebsiteUser(HttpUser):
     """
     A user class that simulates a user browsing a website.
-
+    
     This user will first crawl the website to discover internal URLs on start,
     and then randomly visit those discovered URLs as its main task.
     """
-    wait_time = between(1, 5)  # Wait 1-5 seconds between tasks
+    wait_time = between(1, 5)
     host = TARGET_HOST
 
     def on_start(self):
@@ -36,72 +30,102 @@ class WebsiteUser(HttpUser):
         Called when a user is started. This is where we'll crawl the site.
         """
         print(f"Starting crawl on {self.host}")
-        self.discovered_urls = self._crawl_website(self.host)
-        if not self.discovered_urls:
-            print("Warning: No URLs discovered. User will have no tasks to run.")
-            # Quit the user if no URLs are found to avoid errors
-            self.environment.runner.quit()
-        else:
-            print(f"Discovered {len(self.discovered_urls)} URLs.")
+        try:
+            self.discovered_urls = self._crawl_website(self.host)
+            if not self.discovered_urls:
+                print("Warning: No URLs discovered. Adding root path.")
+                self.discovered_urls = ["/"]
+            else:
+                print(f"Discovered {len(self.discovered_urls)} URLs.")
+        except Exception as e:
+            print(f"Error during crawling: {e}")
+            self.discovered_urls = ["/"]  # Fallback to root
 
-    def _crawl_website(self, base_url: str) -> list[str]:
+    def _crawl_website(self, base_url: str, max_pages: int = 50) -> list[str]:
         """
         Crawls a website to find all unique, internal URLs.
-
+        
         Args:
             base_url: The starting URL to crawl.
-
+            max_pages: Maximum number of pages to crawl to prevent infinite loops.
+            
         Returns:
             A list of unique URLs found on the site.
         """
         discovered_paths = set(["/"])
         to_crawl = ["/"]
+        crawled_count = 0
         base_netloc = urlparse(base_url).netloc
 
-        headers = {
-            "User-Agent": "Locust-Crawler/1.0"
-        }
+        # Use a session for better connection reuse
+        session = requests.Session()
+        session.headers.update({
+            "User-Agent": "Locust-Crawler/1.0",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        })
+        
+        # Set reasonable timeouts and disable SSL verification if needed
+        session.timeout = (10, 30)  # (connect, read) timeouts
+        session.verify = True  # Set to False if you have SSL issues
 
-        while to_crawl:
+        while to_crawl and crawled_count < max_pages:
             path = to_crawl.pop(0)
-            full_url = urljoin(base_url, path)
-
+            crawled_count += 1
+            
             try:
-                response = self.client.get(path, headers=headers, name="Crawler")
-                response.raise_for_status() # Raise an exception for bad status codes
-            except requests.exceptions.RequestException as e:
-                print(f"Crawler request failed for {full_url}: {e}")
+                # Use the session instead of self.client for crawling
+                full_url = urljoin(base_url, path)
+                print(f"Crawling: {path}")
+                
+                response = session.get(full_url)
+                response.raise_for_status()
+                
+                # Only parse HTML content
+                content_type = response.headers.get('content-type', '').lower()
+                if 'text/html' not in content_type:
+                    continue
+                    
+            except Exception as e:
+                print(f"Crawler request failed for {path}: {e}")
                 continue
 
-            soup = BeautifulSoup(response.text, "html.parser")
+            try:
+                soup = BeautifulSoup(response.text, "html.parser")
 
-            for link in soup.find_all("a", href=True):
-                href = link['href']
+                for link in soup.find_all("a", href=True):
+                    href = link['href'].strip()
 
-                # Clean up the URL
-                if "#" in href:
-                    href = href.split("#")[0]
-                if not href or href.startswith("mailto:") or href.startswith("tel:"):
-                    continue
+                    # Clean up the URL
+                    if "#" in href:
+                        href = href.split("#")[0]
+                    if not href or href.startswith(("mailto:", "tel:", "javascript:")):
+                        continue
 
-                # Make URL absolute and parse it
-                absolute_url = urljoin(full_url, href)
-                parsed_url = urlparse(absolute_url)
+                    # Make URL absolute and parse it
+                    absolute_url = urljoin(full_url, href)
+                    parsed_url = urlparse(absolute_url)
 
-                # Check if it's an internal link and not a static asset
-                if parsed_url.netloc == base_netloc and not self._is_static_asset(parsed_url.path):
-                    if parsed_url.path not in discovered_paths:
+                    # Check if it's an internal link and not a static asset
+                    if (parsed_url.netloc == base_netloc and 
+                        not self._is_static_asset(parsed_url.path) and
+                        parsed_url.path not in discovered_paths):
+                        
                         discovered_paths.add(parsed_url.path)
-                        to_crawl.append(parsed_url.path)
+                        if len(to_crawl) < 20:  # Limit queue size
+                            to_crawl.append(parsed_url.path)
 
+            except Exception as e:
+                print(f"Error parsing HTML for {path}: {e}")
+                continue
+
+        session.close()
         return list(discovered_paths)
 
     def _is_static_asset(self, path: str) -> bool:
         """
         Check if a URL path points to a common static file type.
         """
-        # Regex to match common static file extensions
-        static_extensions = r"\.(css|js|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|pdf|zip|gz|mp4|webm)$"
+        static_extensions = r"\.(css|js|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|pdf|zip|gz|mp4|webm|xml|json)$"
         return bool(re.search(static_extensions, path, re.IGNORECASE))
 
     @task
@@ -110,8 +134,21 @@ class WebsiteUser(HttpUser):
         A task that simulates a user visiting a random discovered page.
         """
         if self.discovered_urls:
-            # Pick a random path from the discovered URLs
-            path_to_visit = self.discovered_urls[
-                (hash(str(self.environment.runner.stats.total.num_requests)) % len(self.discovered_urls))
-            ]
-            self.client.get(path_to_visit)
+            # Use random.choice for better randomization
+            path_to_visit = random.choice(self.discovered_urls)
+            try:
+                with self.client.get(path_to_visit, catch_response=True) as response:
+                    if response.status_code != 200:
+                        response.failure(f"Got status code {response.status_code}")
+            except Exception as e:
+                print(f"Request failed for {path_to_visit}: {e}")
+        else:
+            # Fallback if no URLs discovered
+            self.client.get("/")
+
+    @task(1)  # Lower weight task
+    def visit_homepage(self):
+        """
+        Occasionally visit the homepage to simulate typical user behavior.
+        """
+        self.client.get("/")
