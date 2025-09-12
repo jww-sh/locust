@@ -1,7 +1,11 @@
-from locust import HttpUser, task, between
+import locust
 
 import gevent.monkey
 gevent.monkey.patch_all()
+
+
+from locust import HttpUser, task, between
+
 
 import os
 import re
