@@ -395,9 +395,32 @@ class WebsiteUser(HttpUser):
         except Exception as e:
             print(f"Ecommerce search failed: {e}")
 
+    @task(1)
+    def discover_new_urls(self):
+        """
+        Dedicated task for discovering new URLs by crawling unexplored pages.
+        This runs periodically during the test to find more content.
+        """
+        if len(self.discovered_urls) < 10:  # Only run if we have few URLs
+            return
+
+        # Pick a random discovered URL and crawl it for new links
+        url_to_explore = random.choice(self.discovered_urls)
+        try:
+            with self.client.get(url_to_explore, catch_response=True, name="url_discovery") as response:
+                if response.status_code == 200:
+                    self._discover_urls_from_response(response, url_to_explore)
+                else:
+                    response.failure(f"Discovery failed with status {response.status_code}")
+        except Exception as e:
+            print(f"URL discovery failed for {url_to_explore}: {e}")
+
     @task(1)  # Lower weight task
     def visit_homepage(self):
         """
         Occasionally visit the homepage to simulate typical user behavior.
+        Also discovers URLs from homepage.
         """
-        self.client.get("/")
+        response = self.client.get("/")
+        if response.status_code == 200:
+            self._discover_urls_from_response(response, "/")
