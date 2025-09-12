@@ -11,7 +11,7 @@ applications:
         pip install -r requirements.txt
     web:
       commands:
-        start: locust -f locustfile.py --web --web-host 0.0.0.0 --web-port $PORT
+        start: locust -f locustfile.py --web-port $PORT
     variables:
       env:
         # IMPORTANT: Set this to the public URL of the application you want to test.
