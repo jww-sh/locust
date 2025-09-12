@@ -6,6 +6,10 @@ import requests
 from bs4 import BeautifulSoup
 from locust import HttpUser, task, between
 
+
+import gevent.monkey
+gevent.monkey.patch_all()
+
 # --- Configuration ---
 # The host to be tested should be set via the TARGET_HOST environment variable.
 # It defaults to a safe example if the variable is not set.
