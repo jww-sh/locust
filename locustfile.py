@@ -15,6 +15,49 @@ from bs4 import BeautifulSoup
 # --- Configuration ---
 TARGET_HOST = os.getenv("TARGET_HOST", "https://docs.locust.io")
 
+
+# --- Lists for Test Data ---
+SEARCH_QUERIES = [
+    # Original Terms
+    "shirt", "shoes", "pants", "jacket", "hat", "socks", "dress", "gear",
+    # 100+ New Apparel Terms
+    "t-shirt", "jeans", "sweater", "hoodie", "shorts", "skirt", "blouse",
+    "leggings", "coat", "blazer", "vest", "cardigan", "pullover", "tank top",
+    "polo shirt", "suit", "trousers", "joggers", "tracksuit", "overalls",
+    "jumpsuit", "romper", "kimono", "poncho", "scarf", "gloves", "beanie",
+    "cap", "belt", "tie", "bowtie", "suspenders", "sneakers", "boots",
+    "sandals", "heels", "flats", "loafers", "slippers", "swimsuit", "bikini",
+    "trunks", "pajamas", "robe", "underwear", "bra", "briefs", "boxers",
+    "tights", "stockings", "athletic shorts", "sports bra", "yoga pants",
+    "windbreaker", "fleece jacket", "denim jacket", "leather jacket",
+    "trench coat", "parka", "bomber jacket", "peacoat", "duffle coat",
+    "button-down shirt", "flannel shirt", "henley shirt", "v-neck",
+    "crewneck", "turtleneck", "maxi dress", "midi dress", "mini dress",
+    "sundress", "cocktail dress", "formal gown", "pencil skirt", "a-line skirt",
+    "pleated skirt", "cargo pants", "chinos", "corduroys", "capris",
+ "culottes", "wide-leg pants", "straight-leg jeans", "skinny jeans",
+    "bootcut jeans", "high-waisted jeans", "mom jeans", "boyfriend jeans",
+    "graphic tee", "tunic", "camisole", "bodysuit", "Ankle boots",
+    "Chelsea boots", "hiking boots", "running shoes", "cross-trainers",
+    "espadrilles", "wedges", "pumps", "oxfords", "derby shoes", "clogs"
+]
+COLORS = [
+    # Original Colors
+    "red", "blue", "green", "black", "white", "yellow", "purple",
+    # Expanded List of Colors
+    "navy", "sky blue", "royal blue", "teal", "turquoise", "cyan",
+    "forest green", "lime", "olive", "mint", "gray", "silver", "charcoal",
+    "ivory", "cream", "beige", "tan", "brown", "maroon", "burgundy",
+    "crimson", "scarlet", "pink", "magenta", "fuchsia", "lavender",
+    "violet", "indigo", "orange", "gold", "coral", "salmon", "peach",
+    "khaki", "plum", "mustard", "ochre", "rose gold", "bronze", "copper"
+]
+SIZES = [
+    "XS", "S", "M", "L", "XL", "XXL"
+]
+
+
+
 class WebsiteUser(HttpUser):
     """
     A user class that simulates a user browsing a website.
