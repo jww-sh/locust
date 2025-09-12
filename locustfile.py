@@ -1,3 +1,5 @@
+from locust import HttpUser, task, between
+
 import gevent.monkey
 gevent.monkey.patch_all()
 
@@ -7,7 +9,6 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
-from locust import HttpUser, task, between
 
 
 
