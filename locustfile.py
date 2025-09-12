@@ -97,9 +97,10 @@ class WebsiteUser(HttpUser):
             self.static_assets = []
             self.search_info = {'has_search': False}
 
-    def _crawl_website(self, base_url: str, max_pages: int = 50) -> tuple[list[str], list[str]]:
+    def _crawl_website(self, base_url: str, max_pages: int = 1000) -> tuple[list[str], list[str]]:
         """
         Crawls a website to find all unique, internal URLs and static assets.
+        Uses a breadth-first approach to discover as many URLs as possible.
 
         Args:
             base_url: The starting URL to crawl.
@@ -111,7 +112,7 @@ class WebsiteUser(HttpUser):
         discovered_paths = set(["/"])
         static_assets = set()
         to_crawl = ["/"]
-        crawled_count = 0
+        crawled_urls = set()  # Track what we've already crawled
         base_netloc = urlparse(base_url).netloc
 
         # Use a session for better connection reuse
@@ -121,18 +122,25 @@ class WebsiteUser(HttpUser):
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
         })
 
-        # Set reasonable timeouts and disable SSL verification if needed
+        # Set reasonable timeouts
         session.timeout = (10, 30)  # (connect, read) timeouts
         session.verify = True  # Set to False if you have SSL issues
 
+        crawled_count = 0
+        
         while to_crawl and crawled_count < max_pages:
             path = to_crawl.pop(0)
+            
+            # Skip if we've already crawled this URL
+            if path in crawled_urls:
+                continue
+                
+            crawled_urls.add(path)
             crawled_count += 1
 
             try:
-                # Use the session instead of self.client for crawling
                 full_url = urljoin(base_url, path)
-                print(f"Crawling: {path}")
+                print(f"Crawling ({crawled_count}/{max_pages}): {path}")
 
                 response = session.get(full_url)
                 response.raise_for_status()
@@ -148,51 +156,63 @@ class WebsiteUser(HttpUser):
 
             try:
                 soup = BeautifulSoup(response.text, "html.parser")
+                new_urls_found = 0
 
-                # Find links
+                # Find all links
                 for link in soup.find_all("a", href=True):
                     href = link['href'].strip()
 
                     # Clean up the URL
                     if "#" in href:
                         href = href.split("#")[0]
-                    if not href or href.startswith(("mailto:", "tel:", "javascript:")):
+                    if not href or href.startswith(("mailto:", "tel:", "javascript:", "data:")):
                         continue
 
                     # Make URL absolute and parse it
                     absolute_url = urljoin(full_url, href)
                     parsed_url = urlparse(absolute_url)
 
-                    # Check if it's an internal link
-                    if parsed_url.netloc == base_netloc and parsed_url.path not in discovered_paths:
+                    # Check if it's an internal link and we haven't seen it before
+                    if (parsed_url.netloc == base_netloc and 
+                        parsed_url.path and
+                        parsed_url.path not in discovered_paths and
+                        parsed_url.path not in static_assets and
+                        parsed_url.path not in crawled_urls):
+                        
                         if self._is_static_asset(parsed_url.path):
                             static_assets.add(parsed_url.path)
                         else:
                             discovered_paths.add(parsed_url.path)
-                            if len(to_crawl) < 20:  # Limit queue size
+                            # Add to crawling queue - increased limit for better discovery
+                            if len(to_crawl) < 2000:
                                 to_crawl.append(parsed_url.path)
+                                new_urls_found += 1
 
                 # Also collect static assets from img, link, and script tags
                 for tag in soup.find_all(['img', 'link', 'script']):
                     src_attr = tag.get('src') or tag.get('href')
-                    if src_attr:
+                    if src_attr and not src_attr.startswith(('data:', 'javascript:')):
                         absolute_url = urljoin(full_url, src_attr)
                         parsed_url = urlparse(absolute_url)
-                        if parsed_url.netloc == base_netloc:
+                        if parsed_url.netloc == base_netloc and parsed_url.path:
                             static_assets.add(parsed_url.path)
+
+                if new_urls_found > 0:
+                    print(f"  Found {new_urls_found} new URLs to crawl from {path}")
 
             except Exception as e:
                 print(f"Error parsing HTML for {path}: {e}")
                 continue
 
         session.close()
+        print(f"Crawling completed: {len(discovered_paths)} pages, {len(static_assets)} static assets")
         return list(discovered_paths), list(static_assets)
 
     def _is_static_asset(self, path: str) -> bool:
         """
         Check if a URL path points to a common static file type.
         """
-        static_extensions = r"\.(css|js|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|pdf|zip|gz|mp4|webm|xml|json|txt|map)$"
+        static_extensions = r"\.(css|js|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|pdf|zip|gz|mp4|webm|xml|json|txt|map|webp|avif)$"
         return bool(re.search(static_extensions, path, re.IGNORECASE))
 
     def _detect_search_patterns(self) -> dict:
@@ -234,7 +254,7 @@ class WebsiteUser(HttpUser):
 
         return search_info
 
-    @task(3)
+    @task(4)
     def visit_random_page(self):
         """
         A task that simulates a user visiting a random discovered page.
@@ -396,31 +416,8 @@ class WebsiteUser(HttpUser):
             print(f"Ecommerce search failed: {e}")
 
     @task(1)
-    def discover_new_urls(self):
-        """
-        Dedicated task for discovering new URLs by crawling unexplored pages.
-        This runs periodically during the test to find more content.
-        """
-        if len(self.discovered_urls) < 10:  # Only run if we have few URLs
-            return
-
-        # Pick a random discovered URL and crawl it for new links
-        url_to_explore = random.choice(self.discovered_urls)
-        try:
-            with self.client.get(url_to_explore, catch_response=True, name="url_discovery") as response:
-                if response.status_code == 200:
-                    self._discover_urls_from_response(response, url_to_explore)
-                else:
-                    response.failure(f"Discovery failed with status {response.status_code}")
-        except Exception as e:
-            print(f"URL discovery failed for {url_to_explore}: {e}")
-
-    @task(1)  # Lower weight task
     def visit_homepage(self):
         """
         Occasionally visit the homepage to simulate typical user behavior.
-        Also discovers URLs from homepage.
         """
-        response = self.client.get("/")
-        if response.status_code == 200:
-            self._discover_urls_from_response(response, "/")
+        self.client.get("/")
