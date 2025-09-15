@@ -97,7 +97,7 @@ class WebsiteUser(HttpUser):
             self.static_assets = []
             self.search_info = {'has_search': False}
 
-    def _crawl_website(self, base_url: str, max_pages: int = 100) -> tuple[list[str], list[str]]:
+    def _crawl_website(self, base_url: str, max_pages: int = 100000) -> tuple[list[str], list[str]]:
         """
         Crawls a website to find all unique, internal URLs and static assets.
         Uses a breadth-first approach to discover as many URLs as possible.
@@ -184,7 +184,7 @@ class WebsiteUser(HttpUser):
                         else:
                             discovered_paths.add(parsed_url.path)
                             # Add to crawling queue - increased limit for better discovery
-                            if len(to_crawl) < 200:
+                            if len(to_crawl) < 20000:
                                 to_crawl.append(parsed_url.path)
                                 new_urls_found += 1
 
