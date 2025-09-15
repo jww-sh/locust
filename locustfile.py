@@ -276,14 +276,14 @@ class WebsiteUser(HttpUser):
         """
         A task that simulates loading static assets (CSS, JS, images, etc.).
         """
-        if self.static_assets:
-            asset_to_visit = random.choice(self.static_assets)
-            try:
-                with self.client.get(asset_to_visit, catch_response=True, name="static_asset") as response:
-                    if response.status_code not in [200, 304]:  # 304 is Not Modified (cached)
-                        response.failure(f"Static asset failed with status {response.status_code}")
-            except Exception as e:
-                print(f"Static asset request failed for {asset_to_visit}: {e}")
+        #if self.static_assets:
+        #    asset_to_visit = random.choice(self.static_assets)
+        #    try:
+        #        with self.client.get(asset_to_visit, catch_response=True, name="static_asset") as response:
+        #            if response.status_code not in [200, 304]:  # 304 is Not Modified (cached)
+        #                response.failure(f"Static asset failed with status {response.status_code}")
+        #    except Exception as e:
+        #        print(f"Static asset request failed for {asset_to_visit}: {e}")
 
     @task(2)
     def visit_static_asset(self):
