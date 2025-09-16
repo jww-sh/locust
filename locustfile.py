@@ -73,7 +73,7 @@ class WebsiteUser(HttpUser):
     This user will first crawl the website to discover internal URLs on start,
     and then randomly visit those discovered URLs as its main task.
     """
-    wait_time = between(1, 5)
+    wait_time = between(1, 2)
     host = TARGET_HOST
 
     def on_start(self):
